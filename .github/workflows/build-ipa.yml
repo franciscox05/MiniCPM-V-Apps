@@ -1,0 +1,53 @@
+name: Build unsigned iOS .ipa
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - name: Checkout (with shallow submodule)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Select Xcode 26.1.1
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '26.1.1'
+
+      - name: Ensure CMake >= 3.28
+        run: |
+          brew list cmake &>/dev/null || brew install cmake
+          cmake --version
+
+      - name: Build llama.xcframework
+        run: ./scripts/build_xcframework.sh
+
+      - name: Archive (unsigned)
+        run: |
+          xcodebuild archive \
+            -project MiniCPM-V-demo.xcodeproj \
+            -scheme "MiniCPM-V-demo" \
+            -archivePath build/MiniCPM-V-demo.xcarchive \
+            -sdk iphoneos \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM=""
+
+      - name: Package unsigned .ipa
+        run: |
+          mkdir -p build/Payload
+          cp -R "build/MiniCPM-V-demo.xcarchive/Products/Applications/MiniCPM-V-demo.app" build/Payload/
+          cd build
+          zip -r MiniCPM-V-demo.ipa Payload
+          cd ..
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MiniCPM-V-demo-unsigned-ipa
+          path: build/MiniCPM-V-demo.ipa
+          retention-days: 7
